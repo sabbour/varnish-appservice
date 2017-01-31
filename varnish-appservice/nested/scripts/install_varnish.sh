@@ -4,13 +4,13 @@
 # sudo install_varnish.sh -h google.com -a varnish123s -k 60ELpYRoGqv3N6LIT4v5cNOgVDVTbrbrOaPPHbhKHn+OP+myFA2nLK1iLkClELmaCDara+FPD+Sh9RLRCJoOmQ== -s varnishshare -m /mnt/azurefiles -v https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl
 
 # Variables
-BACKEND_HOSTNAME = ""
-AZUREFILES_ACCOUNTNAME = ""
-AZUREFILES_ACCOUNTKEY = ""
-AZUREFILES_SHARENAME = ""
-AZUREFILES_MOUNTPOINT = ""
-AZUREFILES_NFSTEMPLATE = "//accountnameplaceholder.file.core.windows.net/sharenameplaceholder"
-VCL_URL = ""
+BACKEND_HOSTNAME=""
+AZUREFILES_ACCOUNTNAME=""
+AZUREFILES_ACCOUNTKEY=""
+AZUREFILES_SHARENAME=""
+AZUREFILES_MOUNTPOINT=""
+AZUREFILES_NFSTEMPLATE="//accountnameplaceholder.file.core.windows.net/sharenameplaceholder"
+VCL_URL=""
 
 help()
 {
