@@ -2,6 +2,7 @@
 
 # sudo chmod +x install_varnish.sh
 # sudo install_varnish.sh -h google.com -a varnish123s -k 60ELpYRoGqv3N6LIT4v5cNOgVDVTbrbrOaPPHbhKHn+OP+myFA2nLK1iLkClELmaCDara+FPD+Sh9RLRCJoOmQ== -s varnishshare -m /mnt/azurefiles -v https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl
+# sudo install_varnish.sh -h google.com -a "varnish123s" -k "60ELpYRoGqv3N6LIT4v5cNOgVDVTbrbrOaPPHbhKHn+OP+myFA2nLK1iLkClELmaCDara+FPD+Sh9RLRCJoOmQ==" -s "varnishshare" -m "/mnt/azurefiles" -v "https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl"
 
 # Variables
 BACKEND_HOSTNAME=""
@@ -29,84 +30,52 @@ log()
 	echo "$1"
 }
 
-parse_and_validate_parameters()
-{
-	# Parse script parameters
-	while getopts :h:k:a:s optname; do
-
-		# Log input parameters to facilitate troubleshooting
-		log "Option $optname set with value ${OPTARG}"
-
-		case $optname in
-		h) # backend hostname
-			BACKEND_HOSTNAME=${OPTARG}
-			;;
-		a) # azure files account name
-			AZUREFILES_ACCOUNTNAME=${OPTARG}		
-			;;
-		k) # azure files account key
-			AZUREFILES_ACCOUNTKEY=${OPTARG}
-			;;
-		s) # azure files share name
-			AZUREFILES_SHARENAME=${OPTARG}
-			;;
-		m) # local mount directory name
-			AZUREFILES_MOUNTPOINT=${OPTARG}
-			;;			
-		v) # vcl file url
-			VCL_URL=${OPTARG}
-			;;
-		\?) # Unrecognized option - show help
-			echo -e \\n"Option -${BOLD}$OPTARG${NORM} not allowed."
-			help
-			exit 2
-			;;
-	  esac
-	done
-
-	# Validate parameters
-	if [ "$BACKEND_HOSTNAME" == "" ] || [ "$AZUREFILES_ACCOUNTNAME" == "" ] || [ "$AZUREFILES_ACCOUNTKEY" == "" ] || [ "$AZUREFILES_SHARENAME" == "" ] || [ "$AZUREFILES_MOUNTPOINT" == "" ] || [ "$VCL_URL" == "" ];
-	then
-		log "Script executed without required parameters"
-		echo "You must provide all required parameters." >&2
-		exit 3
-	fi
-
-	# Construct the NFS location from the account and share names passed
-	AZUREFILES_NFSTEMPLATE="${AZUREFILES_NFSTEMPLATE/accountnameplaceholder/$AZUREFILES_ACCOUNTNAME}"
-	AZUREFILES_NFSTEMPLATE="${AZUREFILES_NFSTEMPLATE/sharenameplaceholder/$AZUREFILES_SHARENAME}"
-
-	log "Azure Files location: $AZUREFILES_NFSTEMPLATE"
-}
-
 install_required_packages()
 {
 	log "installing required packages"
-	until apt-get -y update && apt-get -y install varnish cifs-utils do
+	until apt-get -y update && apt-get -y install varnish cifs-utils
+	do
 		echo "installing required packages....."
 		sleep 2
-	 done
+	done
 }
 
 configure_prerequisites()
 {
-	log "mounting Azure Files share"
-	mkdir ${AZUREFILES_MOUNTPOINT}
+	# Creating mount directory if it doesn't exist'
+	log "mounting Azure Files share to ${AZUREFILES_MOUNTPOINT}"
+	mkdir -p ${AZUREFILES_MOUNTPOINT}
 	mount -t cifs ${AZUREFILES_NFSTEMPLATE} ${AZUREFILES_MOUNTPOINT} -o vers=3.0,username=${AZUREFILES_ACCOUNTNAME},password=${AZUREFILES_ACCOUNTKEY},dir_mode=0777,file_mode=0777
 
+	# Adding to /etc/fstab to mount on boot, if it isn't there already'
 	log "adding Azure Files mounting to /etc/fstab"
-	echo "${AZUREFILES_NFSTEMPLATE} ${AZUREFILES_MOUNTPOINT} cifs vers=3.0,username=${AZUREFILES_ACCOUNTNAME},password=${AZUREFILES_ACCOUNTKEY},dir_mode=0777,file_mode=0777" >> /etc/fstab
-	mount -a
+	if grep -q 'azure-files-varnish-mount' /etc/fstab ;
+	then
+		echo "Entry in fstab exists."
+	else
+		echo "#azure-files-varnish-mount" >> /etc/fstab
+		echo "${AZUREFILES_NFSTEMPLATE} ${AZUREFILES_MOUNTPOINT} cifs vers=3.0,username=${AZUREFILES_ACCOUNTNAME},password=${AZUREFILES_ACCOUNTKEY},dir_mode=0777,file_mode=0777" >> /etc/fstab
+	fi
 
-	log "downloading vcl template from ${VCL_URL} to ${AZUREFILES_MOUNTPOINT}/default.vcl"
-	curl -o ${AZUREFILES_MOUNTPOINT}/default.vcl ${VCL_URL}
+	# Download the vcl template from the repo only if it doesn't exist, so that we don't accidentally override our configuation
+	if [ ! -f ${AZUREFILES_MOUNTPOINT}/default.vcl ]; then
+		log "downloading vcl template from ${VCL_URL} to ${AZUREFILES_MOUNTPOINT}/default.vcl"
+		curl -o ${AZUREFILES_MOUNTPOINT}/default.vcl ${VCL_URL}
 
-	log "configuring vcl template with backend ${BACKEND_HOSTNAME}"
-	sed -i "s/BACKENDHOSTNAME/${BACKEND_HOSTNAME}" ${AZUREFILES_MOUNTPOINT}/default.vcl
+		log "configuring vcl template with backend ${BACKEND_HOSTNAME}"
+		sed -i "s/BACKENDHOSTNAME/${BACKEND_HOSTNAME}/" ${AZUREFILES_MOUNTPOINT}/default.vcl
+	else
+		echo "vcl template exists in ${AZUREFILES_MOUNTPOINT}/default.vcl, skipping overwrite"
+	fi	
 
-	log "creating varnish.service file in /etc/systemd/system/varnish.service"
-	echo "[Service]
+	# Create varnish.service file if it doesn't exist
+	if [ !  -f /etc/systemd/system/varnish.service ]; then
+		log "creating varnish.service file in /etc/systemd/system/varnish.service"
+		echo "[Service]
 ExecStart=/usr/sbin/varnishd -j unix,user=vcache -F -a :80 -T localhost:6082 -f ${AZUREFILES_MOUNTPOINT}/default.vcl -S /etc/varnish/secret -s malloc,256m" >> /etc/systemd/system/varnish.service
+	else
+		echo "service exists in /etc/systemd/system/varnish.service, skipping overwrite"
+	fi
 }
 
 start_varnish() {
@@ -131,7 +100,40 @@ then
 fi
 
 # Step 1, parse parameters and fill the variables
-parse_and_validate_parameters
+# Parse script parameters
+while getopts ":h:k:a:s:m:v:" optname; do
+	# Log input parameters to facilitate troubleshooting
+	log "Option $optname set with value ${OPTARG}"
+
+	case "${optname}" in
+	h) BACKEND_HOSTNAME=${OPTARG};; # backend hostname
+	a) AZUREFILES_ACCOUNTNAME=${OPTARG};; # azure files account name
+	k) AZUREFILES_ACCOUNTKEY=${OPTARG};; # azure files account key
+	s) AZUREFILES_SHARENAME=${OPTARG};; # azure files share name
+	m) AZUREFILES_MOUNTPOINT=${OPTARG};; # local mount directory name
+	v) VCL_URL=${OPTARG};; # vcl file url
+	\?) # Unrecognized option - show help
+		echo -e \\n"Option -${BOLD}$OPTARG${NORM} not allowed."
+		help
+		exit 2
+		;;
+	esac
+done
+
+# Validate parameters
+if [ "$BACKEND_HOSTNAME" == "" ] || [ "$AZUREFILES_ACCOUNTNAME" == "" ] || [ "$AZUREFILES_ACCOUNTKEY" == "" ] || [ "$AZUREFILES_SHARENAME" == "" ] || [ "$AZUREFILES_MOUNTPOINT" == "" ] || [ "$VCL_URL" == "" ];
+then
+	log "Script executed without required parameters"
+	echo "You must provide all required parameters." >&2
+	exit 3
+fi
+
+
+# Construct the NFS location from the account and share names passed
+AZUREFILES_NFSTEMPLATE="${AZUREFILES_NFSTEMPLATE/accountnameplaceholder/$AZUREFILES_ACCOUNTNAME}"
+AZUREFILES_NFSTEMPLATE="${AZUREFILES_NFSTEMPLATE/sharenameplaceholder/$AZUREFILES_SHARENAME}"
+
+log "Azure Files location: $AZUREFILES_NFSTEMPLATE"
 
 # Step 2, install required packages
 install_required_packages
