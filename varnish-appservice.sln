@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26020.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{151D2E53-A2C4-4D7D-83FE-D05416EBD58E}") = "varnish-appservice", "varnish-appservice\varnish-appservice.deployproj", "{B1AA7F9B-875A-49A2-8627-95F1F3944756}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1AA7F9B-875A-49A2-8627-95F1F3944756}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1AA7F9B-875A-49A2-8627-95F1F3944756}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1AA7F9B-875A-49A2-8627-95F1F3944756}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1AA7F9B-875A-49A2-8627-95F1F3944756}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
