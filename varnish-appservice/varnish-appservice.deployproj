@@ -34,6 +34,8 @@
     <None Include="images\placeholder" />
     <None Include="metadata.json" />
     <None Include="nested\placeholder" />
+    <None Include="nested\scripts\default.vcl" />
+    <None Include="nested\scripts\install_varnish.sh" />
     <None Include="README.md" />
     <None Include="scripts\placeholder" />
   </ItemGroup>

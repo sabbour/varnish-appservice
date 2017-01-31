@@ -1,7 +1,7 @@
 ﻿{
-  "itemDisplayName": "",
-  "description": "",
+  "itemDisplayName": "Caching Web App",
+  "description": "Azure App Service Web App behind a load balanced Varnish caching reverse proxy.",
   "summary": "",
-  "githubUsername": "",
-  "dateUpdated": "<e.g. 2015-12-20>"
+  "githubUsername": "sabbbour",
+  "dateUpdated": "2017-01-31"
 }
