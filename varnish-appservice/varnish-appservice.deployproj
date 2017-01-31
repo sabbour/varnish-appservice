@@ -31,13 +31,11 @@
       <Visible>False</Visible>
     </None>
     <Content Include="Deploy-AzureResourceGroup.ps1" />
+    <None Include="images\placeholder" />
     <None Include="metadata.json" />
+    <None Include="nested\placeholder" />
     <None Include="README.md" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="images\" />
-    <Folder Include="nested\" />
-    <Folder Include="scripts\" />
+    <None Include="scripts\placeholder" />
   </ItemGroup>
   <Target Name="GetReferenceAssemblyPaths" />
 </Project>
