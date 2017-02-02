@@ -36,6 +36,7 @@
     <None Include="nested\placeholder" />
     <None Include="nested\scripts\default.vcl" />
     <None Include="nested\scripts\install_varnish.sh" />
+    <None Include="nested\varnish.json" />
     <None Include="README.md" />
     <None Include="scripts\placeholder" />
   </ItemGroup>

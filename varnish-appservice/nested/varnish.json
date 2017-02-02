@@ -1,0 +1,294 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "varnishAdminUsername": {
+      "type": "string",
+      "minLength": 1
+    },
+    "varnishAdminPassword": {
+      "type": "securestring"
+    },
+    "varnishUbuntuOSVersion": {
+      "type": "string",
+      "defaultValue": "16.04.0-LTS",
+      "allowedValues": [
+        "16.04.0-LTS",
+        "14.04.2-LTS"
+      ]
+    },
+    "varnishBackendHostname": {
+      "type": "string",
+      "minLength": 1
+    },
+    "existingVarnishFileShareStorageAccountName": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Existing Azure Storage Account name which holds the Azure File share"
+      }
+    },
+    "existingVarnishFileShareName": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "varnishshare",
+      "metadata": {
+        "description": "Existing Azure File share name"
+      }
+    },
+    "existingVarnishFileShareStorageAccountKey": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Existing Azure Storage Account key which holds the Azure File share"
+      }
+    },
+    "defaultVCLURI": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "https: //raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl",
+      "metadata": {
+        "description": "Location of the Varnish configuration file"
+      }
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Auto-generated container in staging storage account to receive post-build staging folder upload"
+      }
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation"
+      }
+    }
+  },
+  "variables": {
+    "varnishAppVNETPrefix": "10.0.0.0/16",
+    "varnish0Name": "varnish0",
+    "varnishAppVNETSubnetName": "varnish-subnet",
+    "varnishAppVNETvarnishSubnetPrefix": "10.0.0.0/24",
+    "frontEndNSGName": "varnishNSG",
+    "varnishVMsStorageAccountName": "[concat(uniqueString(resourceGroup().id),'VarnishStorage')]",
+    "varnish0ImagePublisher": "Canonical",
+    "varnish0ImageOffer": "UbuntuServer",
+    "varnish0OSDiskName": "varnish0OSDisk",
+    "varnish0VmSize": "Standard_D2_v2",
+    "varnish0VnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'varnishAppVNET')]",
+    "varnish0SubnetRef": "[concat(variables('varnish0VnetID'), '/subnets/', variables('varnishAppVNETSubnetName'))]",
+    "varnish0StorageAccountContainerName": "vhds",
+    "varnish0NicName": "[concat(variables('varnish0Name'), 'NetworkInterface')]",
+    "configureVarnishCustomScriptExtensionScriptFolder": "scripts",
+    "configureVarnishCustomScriptExtensionScriptFileName": "install_varnish.sh",
+    "varnishFileShareMountPoint": "/mnt/azurefiles"
+  },
+  "resources": [
+    {
+      "name": "varnishAppVNET",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Application Virtual Network"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('varnishAppVNETPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('varnishAppVNETSubnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('varnishAppVNETvarnishSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('frontEndNSGName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('frontEndNSGName')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Varnish NSG"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "ssh-rule",
+            "properties": {
+              "description": "Allow SSH",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "http-rule",
+            "properties": {
+              "description": "Allow HTTP",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "https-rule",
+            "properties": {
+              "description": "Allow HTTPS",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('varnishVMsStorageAccountName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Varnish Storage"
+      },
+      "properties": {
+        "accountType": "[parameters('storageType')]"
+      }
+    },
+    {
+      "name": "[variables('varnish0NicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'varnishAppVNET')]"
+      ],
+      "tags": {
+        "displayName": "Varnish 0 NIC"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('varnish0SubnetRef')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('varnish0Name')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('varnishVMsStorageAccountName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('varnish0NicName'))]"
+      ],
+      "tags": {
+        "displayName": "Varnish 0 VM"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('varnish0VmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('varnish0Name')]",
+          "adminUsername": "[parameters('varnishAdminUsername')]",
+          "adminPassword": "[parameters('varnishAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('varnish0ImagePublisher')]",
+            "offer": "[variables('varnish0ImageOffer')]",
+            "sku": "[parameters('varnishUbuntuOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "varnish0OSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('varnishVMsStorageAccountName')), '2016-01-01').primaryEndpoints.blob, variables('varnish0StorageAccountContainerName'), '/', variables('varnish0OSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('varnish0NicName'))]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "configureVarnishCustomScriptExtension",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', variables('varnish0Name'))]"
+          ],
+          "tags": {
+            "displayName": "configureVarnishCustomScriptExtension"
+          },
+          "properties": {
+            "publisher": "Microsoft.OSTCExtensions",
+            "type": "CustomScriptForLinux",
+            "typeHandlerVersion": "1.4",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "fileUris": [
+                "[concat(parameters('_artifactsLocation'), '/', variables('configureVarnishCustomScriptExtensionScriptFolder'), '/', variables('configureVarnishCustomScriptExtensionScriptFileName'), parameters('_artifactsLocationSasToken'))]"
+              ],
+              "commandToExecute": "[concat('sh ', variables('configureVarnishCustomScriptExtensionScriptFileName'), ' -h ', parameters('varnishBackendHostname'), ' -a ' , parameters('existingVarnishFileShareStorageAccountName'), ' -k ', parameters('existingVarnishFileShareStorageAccountKey'), ' -s ', parameters('existingVarnishFileShareName'), ' -m ', variables('varnishFileShareMountPoint'), ' -v  ', parameters('defaultVCLURI'))]"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": {
+  }
+}

@@ -2,7 +2,6 @@
 
 # sudo chmod +x install_varnish.sh
 # sudo install_varnish.sh -h google.com -a varnish123s -k 60ELpYRoGqv3N6LIT4v5cNOgVDVTbrbrOaPPHbhKHn+OP+myFA2nLK1iLkClELmaCDara+FPD+Sh9RLRCJoOmQ== -s varnishshare -m /mnt/azurefiles -v https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl
-# sudo install_varnish.sh -h google.com -a "varnish123s" -k "60ELpYRoGqv3N6LIT4v5cNOgVDVTbrbrOaPPHbhKHn+OP+myFA2nLK1iLkClELmaCDara+FPD+Sh9RLRCJoOmQ==" -s "varnishshare" -m "/mnt/azurefiles" -v "https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nested/scripts/default.vcl"
 
 # Variables
 BACKEND_HOSTNAME=""
