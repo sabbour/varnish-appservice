@@ -33,10 +33,10 @@
     <Content Include="Deploy-AzureResourceGroup.ps1" />
     <None Include="images\placeholder" />
     <None Include="metadata.json" />
-    <None Include="nested\placeholder" />
-    <None Include="nested\scripts\default.vcl" />
-    <None Include="nested\scripts\install_varnish.sh" />
-    <None Include="nested\varnish.json" />
+    <None Include="nestedtemplates\placeholder" />
+    <None Include="nestedtemplates\scripts\default.vcl" />
+    <None Include="nestedtemplates\scripts\install_varnish.sh" />
+    <None Include="nestedtemplates\varnish.json" />
     <None Include="README.md" />
     <None Include="scripts\placeholder" />
   </ItemGroup>
