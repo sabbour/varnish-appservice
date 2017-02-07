@@ -1,0 +1,28 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageType": { "value": "Standard_LRS" },
+    "varnishAdminUsername": {
+      "value": "azureuser"
+    },
+    "varnishBackendHostname": {
+      "value": "google.com"
+    },
+    "existingVarnishFileShareStorageAccountName": {
+      "value": "varnishshared123"
+    },
+    "existingVarnishFileShareStorageAccountKey": {
+      "value": "WWAAsxrLWYd/HiXS9iGFbwGyyFZ5mN5rPbQ4bnPNDWLa28eE4+WSwjajas6bNJwq7hxCrSWPqJukT8XKVxnmUg=="
+    },
+    "numberOfVarnishInstances": {
+      "value": 2
+    },
+    "varnishLoadBalancerDNSName": {
+      "value": "varn123ss"
+    },
+    "varnishAdminPassword": {
+      "value": "RxNd.v4Q"
+    }
+  }
+}

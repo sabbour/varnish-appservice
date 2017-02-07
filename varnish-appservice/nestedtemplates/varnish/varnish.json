@@ -1,0 +1,428 @@
+﻿{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "storageType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "varnishAdminUsername": {
+      "type": "string",
+      "minLength": 1
+    },
+    "varnishAdminPassword": {
+      "type": "securestring"
+    },
+    "varnishUbuntuOSVersion": {
+      "type": "string",
+      "defaultValue": "16.04.0-LTS",
+      "allowedValues": [
+        "16.04.0-LTS",
+        "14.04.2-LTS"
+      ]
+    },
+    "varnishBackendHostname": {
+      "type": "string",
+      "minLength": 1
+    },
+
+    "numberOfVarnishInstances": {
+      "type": "int",
+      "defaultValue": "2"
+    },
+    "existingVarnishFileShareStorageAccountName": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Existing Azure Storage Account name which holds the Azure File share"
+      }
+    },
+    "existingVarnishFileShareName": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "varnishshare",
+      "metadata": {
+        "description": "Existing Azure File share name"
+      }
+    },
+    "existingVarnishFileShareStorageAccountKey": {
+      "type": "string",
+      "minLength": 1,
+      "metadata": {
+        "description": "Existing Azure Storage Account key which holds the Azure File share"
+      }
+    },
+    "defaultVCLURI": {
+      "type": "string",
+      "minLength": 1,
+      "defaultValue": "https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nestedtemplates/varnish/scripts/default.vcl",
+      "metadata": {
+        "description": "Location of the Varnish configuration file"
+      }
+    },
+    "vanishInstallScriptURI": {
+      "type": "string",
+      "metadata": {
+        "description": "Varnish install script URI"
+      },
+      "defaultValue": "https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nestedtemplates/varnish/scripts/install_varnish.sh"
+    },
+    "_artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "Auto-generated container in staging storage account to receive post-build staging folder upload"
+      },
+      "defaultValue": "https://raw.githubusercontent.com/sabbour/varnish-appservice/master/varnish-appservice/nestedtemplates/varnish"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Auto-generated token to access _artifactsLocation"
+      }
+    },
+    "varnishLoadBalancerDNSName": {
+      "type": "string",
+      "metadata": {
+        "description": "Unique DNS name for Varnish load balancer"
+      }
+    }
+  },
+  "variables": {
+    "varnishAppVNETPrefix": "10.0.0.0/16",
+    "varnishName": "varnish",
+
+    "varnishAppVNETName": "varnish-vnet",
+    "varnishAppVNETSubnetName": "varnish-subnet",
+    "varnishAppVNETvarnishSubnetPrefix": "10.0.0.0/24",
+    "frontEndNSGName": "varnish-nsg",
+    "varnishStorageAccountName": "[concat('v',uniqueString(resourceGroup().id))]",
+    "varnishImagePublisher": "Canonical",
+    "varnishImageOffer": "UbuntuServer",
+
+    "varnishLBName": "varnish-lb",
+    "varnishPublicIPName": "varnish-ip",
+    "varnishFrontendIPConfigName": "varnish-frontendconfig",
+    "varnishBackendPoolName": "varnish-backendpool",
+    "varnishPublicIPAddressType": "Dynamic",
+
+    "varnishVmSize": "Standard_D2_v2",
+    "varnishVnetID": "[resourceId('Microsoft.Network/virtualNetworks', variables('varnishAppVNETName'))]",
+    "varnishSubnetRef": "[concat(variables('varnishVnetID'), '/subnets/', variables('varnishAppVNETSubnetName'))]",
+    "varnishStorageAccountContainerName": "vhds",
+
+    "varnishAvsetName": "varnish-avset",
+    "varnishFileShareMountPoint": "/mnt/azurefiles"
+  },
+  "resources": [
+    {
+      "name": "[variables('varnishAppVNETName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Application Virtual Network"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('varnishAppVNETPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('varnishAppVNETSubnetName')]",
+            "properties": {
+              "addressPrefix": "[variables('varnishAppVNETvarnishSubnetPrefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('frontEndNSGName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('varnishPublicIPName')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Varnish Loadbalancer Public IP"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "[variables('varnishPublicIPAddressType')]",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('varnishLoadBalancerDNSName')]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "name": "[variables('varnishLBName')]",
+      "type": "Microsoft.Network/loadBalancers",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Varnish Load Balancer"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('varnishPublicIPName'))]"
+      ],
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "[variables('varnishFrontendIPConfigName')]",
+            "properties": {
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses',variables('varnishPublicIPName'))]"
+              }
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "[variables('varnishBackendPoolName')]"
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/loadBalancers/inboundNatRules",
+      "name": "[concat(variables('varnishLBName'), '/', 'ssh-vm', copyIndex())]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Varnish Load Balancer N Inbound NAT Rule"
+      },
+      "copy": {
+        "name": "lbNatLoop",
+        "count": "[parameters('numberOfVarnishInstances')]"
+      },
+      "dependsOn": [
+        "[concat('Microsoft.Network/loadBalancers/', variables('varnishLBName'))]"
+      ],
+      "properties": {
+        "frontendIPConfiguration": {
+          "id": "[concat(resourceId('Microsoft.Network/loadBalancers',variables('varnishLBName')),'/frontendIPConfigurations/',variables('varnishFrontendIPConfigName'))]"
+        },
+        "protocol": "tcp",
+        "frontendPort": "[copyIndex(5000)]",
+        "backendPort": 22,
+        "enableFloatingIP": false
+      }
+    },
+    {
+      "apiVersion": "2015-06-15",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "[variables('frontEndNSGName')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "displayName": "Varnish NSG"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "ssh-rule",
+            "properties": {
+              "description": "Allow SSH",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "http-rule",
+            "properties": {
+              "description": "Allow HTTP",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "80",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 101,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "https-rule",
+            "properties": {
+              "description": "Allow HTTPS",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 102,
+              "direction": "Inbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('varnishStorageAccountName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Varnish Storage"
+      },
+      "properties": {
+        "accountType": "[parameters('storageType')]"
+      }
+    },
+    {
+      "name": "[concat(variables('varnishName'), '-', copyindex(), '-nic')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "copy": {
+        "name": "varnishNICLoop",
+        "count": "[parameters('numberOfVarnishInstances')]"
+      },
+      "dependsOn": [
+        "[variables('varnishVnetID')]",
+        "[resourceId('Microsoft.Network/loadBalancers/', variables('varnishLBName'))]",
+        "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('varnishLBName')),'/inboundNatRules/ssh-vm', copyindex())]"
+      ],
+      "tags": {
+        "displayName": "Varnish N NIC"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('varnishSubnetRef')]"
+              },
+              "loadBalancerBackendAddressPools": [
+                {
+                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('varnishLBName')),'/backendAddressPools/', variables('varnishBackendPoolName'))]"
+                }
+              ],
+              "loadBalancerInboundNatRules": [
+                {
+                  "id": "[concat(resourceId('Microsoft.Network/loadBalancers/', variables('varnishLBName')),'/inboundNatRules/ssh-vm', copyindex())]"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[concat(variables('varnishName'), '-', copyindex())]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "copy": {
+        "name": "varnishVMLoop",
+        "count": "[parameters('numberOfVarnishInstances')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('varnishStorageAccountName'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('varnishName'), '-', copyindex(), '-nic'))]",
+        "[resourceId('Microsoft.Compute/availabilitySets/', variables('varnishAvsetName'))]"
+      ],
+      "tags": {
+        "displayName": "Varnish N VM"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('varnishVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[concat(variables('varnishName'), '-', copyindex())]",
+          "adminUsername": "[parameters('varnishAdminUsername')]",
+          "adminPassword": "[parameters('varnishAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('varnishImagePublisher')]",
+            "offer": "[variables('varnishImageOffer')]",
+            "sku": "[parameters('varnishUbuntuOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "[concat(variables('varnishName'), '-', copyindex(), '-osdisk')]",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('varnishStorageAccountName')), '2016-01-01').primaryEndpoints.blob, variables('varnishStorageAccountContainerName'), '/', concat(variables('varnishName'), '-', copyindex(), '-osdisk'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "availabilitySet": {
+          "id": "[resourceId('Microsoft.Compute/availabilitySets',variables('varnishAvsetName'))]"
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('varnishName'), '-', copyindex(), '-nic'))]"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "configureVarnishCustomScriptExtension",
+          "type": "extensions",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2016-03-30",
+          "dependsOn": [
+            "[resourceId('Microsoft.Compute/virtualMachines', concat(variables('varnishName'), '-', copyindex()))]"
+          ],
+          "tags": {
+            "displayName": "configureVarnishCustomScriptExtension"
+          },
+          "properties": {
+            "publisher": "Microsoft.OSTCExtensions",
+            "type": "CustomScriptForLinux",
+            "typeHandlerVersion": "1.4",
+            "autoUpgradeMinorVersion": true,
+            "settings": {
+              "fileUris": [
+                "[concat(parameters('vanishInstallScriptURI'))]"
+              ],
+              "commandToExecute": "[concat('sh install_varnish.sh -h ', parameters('varnishBackendHostname'), ' -a ' , parameters('existingVarnishFileShareStorageAccountName'), ' -k ', parameters('existingVarnishFileShareStorageAccountKey'), ' -s ', parameters('existingVarnishFileShareName'), ' -m ', variables('varnishFileShareMountPoint'), ' -v  ', parameters('defaultVCLURI'))]"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "[variables('varnishAvsetName')]",
+      "type": "Microsoft.Compute/availabilitySets",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [],
+      "tags": {
+        "displayName": "Varnish Availability Set"
+      },
+      "properties": {
+        "platformUpdateDomainCount": 1,
+        "platformFaultDomainCount": 1
+      }
+    }
+  ],
+  "outputs": {
+
+  }
+}

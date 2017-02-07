@@ -2,10 +2,36 @@
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
+        "_artifactsLocation": {
+            "type": "string"
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring"
+        }
     },
     "variables": {
+        "varnishTemplateFolder": "nestedtemplates/varnish",
+        "varnishTemplateFileName": "varnish.json",
+        "varnishTemplateParametersFileName": "varnish.parameters.json"
     },
     "resources": [
+        {
+            "name": "varnish",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2016-09-01",
+            "dependsOn": [ ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[concat(parameters('_artifactsLocation'), '/', variables('varnishTemplateFolder'), '/', variables('varnishTemplateFileName'), parameters('_artifactsLocationSasToken'))]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parametersLink": {
+                    "uri": "[concat(parameters('_artifactsLocation'), '/', variables('varnishTemplateFolder'), '/', variables('varnishTemplateParametersFileName'), parameters('_artifactsLocationSasToken'))]",
+                    "contentVersion": "1.0.0.0"
+                }
+            }
+        }
     ],
     "outputs": {
     }
